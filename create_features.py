@@ -68,6 +68,28 @@ def normalize (arr):
 	arr = np.around (arr, decimals=2)
 	return arr.tolist()
 
+def hog (img, index):
+	winSize = (512, 384)
+	blockSize = (128, 128)
+	cellSize = (64, 64)
+	blockStride = (64, 64)
+	nbins = 9
+	derivAperture = 1
+	winSigma = 4.
+	histogramNormType = 0
+	L2HysThreshold = 2.0000000000000001e-01
+	gammaCorrection = 0
+	nlevels = 64
+	hog = cv2.HOGDescriptor(winSize,blockSize,blockStride,cellSize,nbins,derivAperture,winSigma,histogramNormType,L2HysThreshold,gammaCorrection,nlevels)
+	#compute(img[, winStride[, padding[, locations]]]) -> descriptors
+	winStride = (8,8)
+	padding = (8,8)
+	locations = ((10,20),)
+	hist = hog.compute(img)
+	hist = np.around (hist, decimals=4)
+	for item in hist:
+		features[index].append (item[0])
+
 def convert_edge_features (img, index):
 	img = cv2.Canny (img, 100, 200)
 	#cv2.imshow ('Edges', img)
@@ -128,7 +150,8 @@ for index in range (num_images_abs):
 	img_gray.append (cv2.imread (file_name, 0))
 	features.append([])
 	print(index)
-	convert_edge_features (img_gray[index], index)    
+	#convert_edge_features (img_gray[index], index)
+	hog(img_gray[index], index)
 	convert_colour_features (img_bgr[index], index)
 	convert_texture_features(img_gray[index], index)
 	features[index].append(1)
@@ -138,13 +161,14 @@ for index in range (num_images_real):
 	img_gray.append (cv2.imread (file_name, 0))
 	features.append([])
 	print(index)
-	convert_edge_features (img_gray[index+num_images_abs], index+num_images_abs)
+	#convert_edge_features (img_gray[index+num_images_abs], index+num_images_abs)
+	hog (img_gray[index+num_images_abs], index+num_images_abs)
 	convert_colour_features (img_bgr[index+num_images_abs], index+num_images_abs)
 	convert_texture_features(img_gray[index+num_images_abs], index+num_images_abs)
 	features[index+num_images_abs].append(0)
 #print (features)
 #print (matplotlib.matplotlib_fname())
-out_file_path = './output_features_less_edge.csv'
+out_file_path = './output_features_try.csv'
 
 with open(out_file_path, "a") as out_file:
     writer = csv.writer(out_file)
