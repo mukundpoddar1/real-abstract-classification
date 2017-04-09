@@ -116,19 +116,13 @@ def find_connected_components(hues):
 	return connected_components
 
 def connected_components_table(hues, stats):
-	component_table={}
+	component_table={0:[0,0], 12:[0,0], 24:[0,0], 36:[0,0], 48:[0,0], 60:[0,0], 72:[0,0], 84:[0,0], 96:[0,0], 108:[0,0], 120:[0,0], 132:[0,0], 144:[0,0], 156:[0,0], 168:[0,0]}
 	for label in stats:
 		hue=hues[label[1]][label[0]]
-		if hue not in component_table.keys():
-			if label[4]>2400:
-				component_table[hue]=[label[4], 0]
-			else:
-				component_table[hue]=[0, label[4]]
+		if label[4]>2400:
+			component_table[hue]=[component_table[hue][0]+label[4], 0]
 		else:
-			if label[4]>2400:
-				component_table[hue]=[component_table[hue][0]+label[4], 0]
-			else:
-				component_table[hue]=[0, component_table[hue][0]+label[4]]
+			component_table[hue]=[0, component_table[hue][0]+label[4]]
 	return component_table
 
 def convert_edge_features (img, index):
@@ -177,7 +171,9 @@ def convert_colour_coherence_features(img, index):
 	connectivity=8
 	ret, connected_components, stats, c=cv2.connectedComponentsWithStats(hues)
 	component_table=connected_components_table(hues, stats)
-	features[index].append(component_table)
+	for key in sorted(component_table.keys()):
+		features[index].append(component_table[key][0])
+		features[index].append(component_table[key][1])
 
 def convert_texture_features (img, index):
 	scaled_img = cv2.resize(img, (200, 300), interpolation=cv2.INTER_AREA)
@@ -205,7 +201,7 @@ def convert_colour_number_features(img, index):
 img_bgr = []
 img_gray = []
 features = []
-no_images = 1
+no_images = 3
 
 folder_name = input ('Enter path to main folder: ')
 for index in range (no_images):
@@ -223,9 +219,9 @@ for index in range (no_images):
 #print (matplotlib.matplotlib_fname())
 out_file_path = '/home/shriya/ML_project/real-abstract-classification/output_features_connected.csv'
 
-with open(out_file_path, "a") as out_file:
+'''with open(out_file_path, "a") as out_file:
     writer = csv.writer(out_file)
-    writer.writerows(features)
+    writer.writerows(features)'''
 #for index in range(no_images):
 #img_hist = cv2.calcHist ([cv2.Canny(img_gray[0], 100, 200)], [0], None, [16], [0,256])
 #print (img_hist)
