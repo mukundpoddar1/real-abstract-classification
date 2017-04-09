@@ -70,7 +70,6 @@ def ml_support_vector_machine(features_train, features_test, labels_train, label
 	print (confusion_matrix(labels_test, predictions))
 	print (accuracy_score(labels_test, predictions))
 
-seed = 7
 file_name = input ('Enter the path of features.csv: ')
 features,labels = load_csv(file_name)
 features_train, features_test, labels_train, labels_test = make_training_and_testing(features, labels)

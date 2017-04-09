@@ -61,6 +61,27 @@ def calculate_lbp_mask (input_img):
 	#print (lbp_mask[0])
 	return lbp_mask
 
+def reduce_hues(hues, bins):
+	rows, cols=hues.shape
+	step=180/bins
+	for i in range(rows):
+		for j in range(cols):
+			hues[i][j]=int(hues[i][j]/step)*step
+	return hues
+
+def connected_components_table(hues, stats):
+	component_table={0:[0,0], 12:[0,0], 24:[0,0], 36:[0,0], 48:[0,0], 60:[0,0], 72:[0,0], 84:[0,0], 96:[0,0], 108:[0,0], 120:[0,0], 132:[0,0], 144:[0,0], 156:[0,0], 168:[0,0]}
+	for label in stats:
+		if label[0]>=600 or label[1]>=400:
+			continue
+		hue=hues[label[cv2.CC_STAT_TOP]][label[cv2.CC_STAT_LEFT]]
+		if label[4]>2400:
+			component_table[hue]=[component_table[hue][0]+label[4], 0]
+		else:
+			component_table[hue]=[0, component_table[hue][0]+label[4]]
+	return component_table
+
+
 def normalize (arr):
 	arr = np.array(arr)
 	if arr.max() != 0:
@@ -117,6 +138,35 @@ def convert_edge_features (img, index):
 		features[index].append(item)
 	return;
 
+def convert_colour_coherence_features(img, index):
+	curr_img_hsv = cv2.cvtColor (img, cv2.COLOR_BGR2HSV)
+	curr_img_hsv = np.array(curr_img_hsv)
+	hues = np.zeros((curr_img_hsv.shape[0],curr_img_hsv.shape[1]), dtype=curr_img_hsv.dtype)
+	hues[:,:] = curr_img_hsv[:, :, 0]
+	hues=reduce_hues(hues, 15)
+	connectivity=8
+	ret, connected_components, stats, c=cv2.connectedComponentsWithStats(hues)
+	component_table=connected_components_table(hues, stats)
+	for key in sorted(component_table.keys()):
+		features[index].append(component_table[key][0])
+		features[index].append(component_table[key][1])
+
+
+def convert_colour_number_features(img, index):
+	curr_img_hsv = cv2.cvtColor (img, cv2.COLOR_BGR2HSV)
+	hue_dict = {}
+	rows=400
+	cols=600
+	for r in range(rows):
+		for c in range(cols):
+			hue = curr_img_hsv[r][c][0]
+			sat = curr_img_hsv[r][c][1]/255
+			val = curr_img_hsv[r][c][2]/255
+			if sat>=0.2 and val>=0.15 and val<=0.95 and hue not in hue_dict:
+				hue_dict[hue] = 1
+	features[index].append(len(hue_dict))
+
+
 def convert_colour_features (img, index):
 	curr_img_hsv = cv2.cvtColor (img, cv2.COLOR_BGR2HSV)
 	colour_hist = cv2.calcHist (curr_img_hsv, [0], None, [15], [0,179]).flatten().tolist()
@@ -151,9 +201,11 @@ for index in range (num_images_abs):
 	features.append([])
 	print(index)
 	#convert_edge_features (img_gray[index], index)
-	hog(img_gray[index], index)
+	convert_colour_number_features (img_bgr[index], index)
+	convert_colour_coherence_features (img_bgr[index], index)
 	convert_colour_features (img_bgr[index], index)
 	convert_texture_features(img_gray[index], index)
+	hog(img_gray[index], index)
 	features[index].append(1)
 for index in range (num_images_real):
 	file_name = real_folder_name+'/real'+str(index)+'.jpg'
@@ -162,13 +214,15 @@ for index in range (num_images_real):
 	features.append([])
 	print(index)
 	#convert_edge_features (img_gray[index+num_images_abs], index+num_images_abs)
-	hog (img_gray[index+num_images_abs], index+num_images_abs)
+	convert_colour_number_features (img_bgr[index+num_images_abs], index+num_images_abs)
+	convert_colour_coherence_features (img_bgr[index+num_images_abs], index+num_images_abs)
 	convert_colour_features (img_bgr[index+num_images_abs], index+num_images_abs)
 	convert_texture_features(img_gray[index+num_images_abs], index+num_images_abs)
+	hog (img_gray[index+num_images_abs], index+num_images_abs)
 	features[index+num_images_abs].append(0)
 #print (features)
 #print (matplotlib.matplotlib_fname())
-out_file_path = './output_features_try.csv'
+out_file_path = './output_features.csv'
 
 with open(out_file_path, "a") as out_file:
     writer = csv.writer(out_file)

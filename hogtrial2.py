@@ -140,7 +140,7 @@ def convert_texture_features (img, index):
 img_bgr = []
 img_gray = []
 features = []
-num_images_abs = 5
+num_images_abs = 50
 abs_folder_name = input ('Enter path to abstract folder: ')
 for index in range (num_images_abs):
 	file_name = abs_folder_name+'/abstract'+str(index)+'.jpg'
