@@ -16,11 +16,11 @@ def load_csv(file_name):
 	label_data = []
 	rows = len(dataset)
 	cols = len(dataset[0])
-	for r in range(rows):
+	for r in range(1, rows):
 		for c in range(cols-1):
 			dataset[r][c] = float(dataset[r][c])
 		dataset[r][cols-1] = int(dataset[r][cols-1])
-		feature_data.append(dataset[r][33:])
+		feature_data.append(dataset[r][:])
 		label_data.append(dataset[r][-1])
 	return feature_data, label_data
 
