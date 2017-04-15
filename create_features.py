@@ -61,12 +61,19 @@ def calculate_lbp_mask (input_img):
 	#print (lbp_mask[0])
 	return lbp_mask
 
-def reduce_hues(hues, bins):
+def reduce_hues(img, bins):
+	curr_img_hsv = cv2.cvtColor (img, cv2.COLOR_BGR2HSV)
+	curr_img_hsv = np.array(curr_img_hsv)
+	hues = np.zeros((curr_img_hsv.shape[0],curr_img_hsv.shape[1]), dtype=curr_img_hsv.dtype)
+	hues[:,:] = curr_img_hsv[:, :, 0]
 	rows, cols=hues.shape
-	step=180/bins
+	step=180/(bins*2)
 	for i in range(rows):
 		for j in range(cols):
-			hues[i][j]=int(hues[i][j]/step)*step
+			div=int(hues[i][j]/step)
+			if div%2!=0:
+				div=(div+1)%30
+			hues[i][j]=div*step*2
 	return hues
 
 def connected_components_table(hues, stats):
@@ -89,6 +96,11 @@ def normalize (arr):
 	arr = np.around (arr, decimals=2)
 	return arr.tolist()
 
+def L1(v1,v2):
+      if len(v1)!=len(v2):
+        print ('error')
+      return sum([abs(v1[i]-v2[i]) for i in range(len(v1))])
+
 def hog (img, index):
 	winSize = (512, 384)
 	blockSize = (128, 128)
@@ -110,6 +122,31 @@ def hog (img, index):
 	hist = np.around (hist, decimals=4)
 	for item in hist:
 		features[index].append (item[0])
+
+def sobel_otsu (img, index):
+	sobelx = cv2.Sobel(img, cv2.CV_64F, 2, 0, ksize=1)
+	sobelx = np.absolute(sobelx)
+	sobelx = np.uint8(sobelx)
+	sobelx = cv2.GaussianBlur(sobelx,(5,5),0)
+	ret3,sobelx = cv2.threshold(sobelx,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+	sobely = cv2.Sobel(img, cv2.CV_64F, 0, 2, ksize=1)
+	sobely = np.absolute(sobely)
+	sobely = np.uint8(sobely)
+	sobely = cv2.GaussianBlur(sobely, (5,5),0)
+	ret3,sobely = cv2.threshold(sobely,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+	edge_density = []
+	for tilex in range (0, 400, 100):
+		for tiley in range (0, 600, 100):
+			edge_density.append(0)
+			for x in range(100):
+				for y in range (100):
+					edge_density[int(tilex/25) + int(tiley/100)] += (sobelx.item(tilex+x, tiley+y) or sobely.item(tilex+x, tiley+y))/255
+	edge_density = normalize(edge_density)
+	std_dev = np.std (edge_density)
+	for item in edge_density:
+		features[index].append(item)
+	features[index].append(std_dev)
+
 
 def convert_edge_features (img, index):
 	img = cv2.Canny (img, 100, 200)
@@ -136,23 +173,20 @@ def convert_edge_features (img, index):
 	#col_inter = normalize(col_inter)
 	for item in col_inter:
 		features[index].append(item)
-	return;
+	'''cv2.imshow ("Sobel", sobel)
+	if cv2.waitKey(0) == 27:
+		quit()'''
 
-def convert_colour_coherence_features(img, index):
-	curr_img_hsv = cv2.cvtColor (img, cv2.COLOR_BGR2HSV)
-	curr_img_hsv = np.array(curr_img_hsv)
-	hues = np.zeros((curr_img_hsv.shape[0],curr_img_hsv.shape[1]), dtype=curr_img_hsv.dtype)
-	hues[:,:] = curr_img_hsv[:, :, 0]
-	hues=reduce_hues(hues, 15)
+def colour_coherence(img, index):
 	connectivity=8
-	ret, connected_components, stats, c=cv2.connectedComponentsWithStats(hues)
-	component_table=connected_components_table(hues, stats)
-	for key in sorted(component_table.keys()):
-		features[index].append(component_table[key][0])
-		features[index].append(component_table[key][1])
+	ret, connected_components, stats, c=cv2.connectedComponentsWithStats(img, connectivity, cv2.CV_32S)
+	component_count=0
+	for stat in stats:
+		component_count=component_count+1
+	features[index].append(component_count)
 
 
-def convert_colour_number_features(img, index):
+def hue_count(img, index):
 	curr_img_hsv = cv2.cvtColor (img, cv2.COLOR_BGR2HSV)
 	hue_dict = {}
 	rows=400
@@ -167,28 +201,67 @@ def convert_colour_number_features(img, index):
 	features[index].append(len(hue_dict))
 
 
-def convert_colour_features (img, index):
-	curr_img_hsv = cv2.cvtColor (img, cv2.COLOR_BGR2HSV)
-	colour_hist = cv2.calcHist (curr_img_hsv, [0], None, [15], [0,179]).flatten().tolist()
+def hue_histogram (img, index):
+	img=np.array(img)
+	colour_tile_hists=[[[] for x in range(6)] for y in range(4)]
+	for tilex in range (0, 400, 100):
+		for tiley in range (0, 600, 100):
+			tile = img[tilex: tilex+100, tiley: tiley+100]
+			'''cv2.imshow ("Sobel", curr_tile_hsv)
+			if cv2.waitKey(0) == 27:
+				quit()'''
+			colour_hist, _ = np.histogram(tile.flatten(), bins = 15)
+			colour_tile_hists[int(tilex/100)][int(tiley/100)]=np.array(colour_hist, np.float32)
+			#colour_hist = cv2.calcHist (curr_tile_hsv, [0], None, [18], [0,180]).flatten().tolist()
+	for row in range(4):
+		for col in range(6):
+			neighbours=[]
+			dist=0
+			if (row>0):
+				neighbours.append(colour_tile_hists[row-1][col])
+			if (col>0):
+				neighbours.append(colour_tile_hists[row][col-1])
+			if (row<3):
+				neighbours.append(colour_tile_hists[row+1][col])
+			if (col<5):
+				neighbours.append(colour_tile_hists[row][col+1])
+			for neighbour in neighbours:
+				dist=dist + cv2.compareHist(colour_tile_hists[row][col], neighbour, method=cv2.HISTCMP_CORREL)
+			features[index].append(dist)
+	
 	#cv2.imshow ("for HSV", img)
 	#cv2.waitKey(0)
-	colour_hist = normalize (colour_hist)
-	for item in colour_hist:
-		features[index].append (item)
-	return;
 
-def convert_texture_features (img, index):
+def lbp_texture (img, index):
 	scaled_img = cv2.resize(img, (300, 200), interpolation=cv2.INTER_AREA)
 	lbp_mask = calculate_lbp_mask(scaled_img)
 	lbp_mask = np.array(lbp_mask)
 	hist_input = lbp_mask.flatten()
 	lbp_histogram, bin_edges = np.histogram(hist_input, 8)
-	lbp_histogram = normalize(lbp_histogram)
-	for val in lbp_histogram:
+	lbp_histogram_norm = normalize(lbp_histogram)
+	lbp_histogram_norm=np.array(lbp_histogram_norm, np.float32)
+	lbp_histogram_dists=[]
+	for row in range(0, 200, 100):
+		for col in range(0, 300, 100):
+			lbp_histogram_tile, bin_edges=np.histogram(lbp_mask[row:row+100, col:col+100].flatten(), 8)
+			lbp_histogram_tile = np.array(normalize(lbp_histogram_tile), np.float32)
+			lbp_histogram_dists.append(cv2.compareHist(lbp_histogram_tile, lbp_histogram_norm, method=cv2.HISTCMP_CHISQR_ALT))
+	for val in lbp_histogram_dists:
 		features[index].append(val)
+
+def contrast (img, index):
+	img_stddev = []
+	for tilex in range (0, 400, 100):
+		for tiley in range (0, 600, 100):
+			_, tile_stddev = cv2.meanStdDev(img[tilex:tilex+100, tiley:tiley+100])
+			img_stddev.append(tile_stddev[0][0])
+	for item in img_stddev:
+		features[index].append (item)
+
 
 img_bgr = []
 img_gray = []
+img_hues = []
 features = []
 num_images_abs = 164
 num_images_real = 194
@@ -198,31 +271,37 @@ for index in range (num_images_abs):
 	file_name = abs_folder_name+'/abstract'+str(index)+'.jpg'
 	img_bgr.append (cv2.imread (file_name, 1))
 	img_gray.append (cv2.imread (file_name, 0))
+	img_hues.append(reduce_hues(img_bgr[index], 15))
 	features.append([])
 	print(index)
+	lbp_texture(img_gray[index], index) #6
+	#hue_histogram (img_hues[index], index) #24
+	contrast (img_gray[index], index) #24
+	colour_coherence (img_hues[index], index) #1
+	hue_count (img_bgr[index], index) #1
 	#convert_edge_features (img_gray[index], index)
-	convert_colour_number_features (img_bgr[index], index)
-	convert_colour_coherence_features (img_bgr[index], index)
-	convert_colour_features (img_bgr[index], index)
-	convert_texture_features(img_gray[index], index)
-	hog(img_gray[index], index)
+	#hog(img_gray[index], index)
+	sobel_otsu(img_gray[index], index) #25
 	features[index].append(1)
 for index in range (num_images_real):
 	file_name = real_folder_name+'/real'+str(index)+'.jpg'
 	img_bgr.append (cv2.imread (file_name, 1))
 	img_gray.append (cv2.imread (file_name, 0))
+	img_hues.append(reduce_hues(img_bgr[index+num_images_abs], 15))
 	features.append([])
 	print(index)
+	lbp_texture(img_gray[index+num_images_abs], index+num_images_abs)
+	#hue_histogram (img_hues[index+num_images_abs], index+num_images_abs)
+	contrast (img_gray[index+num_images_abs], index+num_images_abs)
+	colour_coherence (img_hues[index+num_images_abs], index+num_images_abs)
+	hue_count (img_bgr[index+num_images_abs], index+num_images_abs)
 	#convert_edge_features (img_gray[index+num_images_abs], index+num_images_abs)
-	convert_colour_number_features (img_bgr[index+num_images_abs], index+num_images_abs)
-	convert_colour_coherence_features (img_bgr[index+num_images_abs], index+num_images_abs)
-	convert_colour_features (img_bgr[index+num_images_abs], index+num_images_abs)
-	convert_texture_features(img_gray[index+num_images_abs], index+num_images_abs)
-	hog (img_gray[index+num_images_abs], index+num_images_abs)
+	#hog (img_gray[index+num_images_abs], index+num_images_abs)
+	sobel_otsu(img_gray[index+num_images_abs], index+num_images_abs)
 	features[index+num_images_abs].append(0)
 #print (features)
 #print (matplotlib.matplotlib_fname())
-out_file_path = './output_features.csv'
+out_file_path = './new_output_featuresnohh.csv'
 
 with open(out_file_path, "a") as out_file:
     writer = csv.writer(out_file)
