@@ -74,6 +74,7 @@ def reduce_hues(img, bins):
 			if div%2!=0:
 				div=(div+1)%30
 			hues[i][j]=div*step*2
+			#hues[i][j]=(hues[i][j]/step)*step
 	return hues
 
 def connected_components_table(hues, stats):
@@ -204,6 +205,7 @@ def hue_count(img, index):
 def hue_histogram (img, index):
 	img=np.array(img)
 	colour_tile_hists=[[[] for x in range(6)] for y in range(4)]
+	dist=0
 	for tilex in range (0, 400, 100):
 		for tiley in range (0, 600, 100):
 			tile = img[tilex: tilex+100, tiley: tiley+100]
@@ -211,12 +213,19 @@ def hue_histogram (img, index):
 			if cv2.waitKey(0) == 27:
 				quit()'''
 			colour_hist, _ = np.histogram(tile.flatten(), bins = 15)
+
+			#print(colour_hist)
+			
+			#cv2.waitKey(0)
 			colour_tile_hists[int(tilex/100)][int(tiley/100)]=np.array(colour_hist, np.float32)
+
 			#colour_hist = cv2.calcHist (curr_tile_hsv, [0], None, [18], [0,180]).flatten().tolist()
+	dist=0
 	for row in range(4):
 		for col in range(6):
+			#plt.plot(colour_tile_hists[row][col])
+			#plt.show()
 			neighbours=[]
-			dist=0
 			if (row>0):
 				neighbours.append(colour_tile_hists[row-1][col])
 			if (col>0):
@@ -226,8 +235,11 @@ def hue_histogram (img, index):
 			if (col<5):
 				neighbours.append(colour_tile_hists[row][col+1])
 			for neighbour in neighbours:
-				dist=dist + cv2.compareHist(colour_tile_hists[row][col], neighbour, method=cv2.HISTCMP_CORREL)
-			features[index].append(dist)
+				#this_dist = cv2.compareHist(colour_tile_hists[row][col], neighbour, method=cv2.HISTCMP_CORREL)
+				this_dist=L1(colour_tile_hists[row][col], neighbour)
+				dist=dist + this_dist
+				#print(this_dist)
+	features[index].append(dist)
 	
 	#cv2.imshow ("for HSV", img)
 	#cv2.waitKey(0)
@@ -255,8 +267,7 @@ def contrast (img, index):
 		for tiley in range (0, 600, 100):
 			_, tile_stddev = cv2.meanStdDev(img[tilex:tilex+100, tiley:tiley+100])
 			img_stddev.append(tile_stddev[0][0])
-	for item in img_stddev:
-		features[index].append (item)
+	features[index].append (sum(img_stddev))
 
 
 img_bgr = []
@@ -275,12 +286,10 @@ for index in range (num_images_abs):
 	features.append([])
 	print(index)
 	lbp_texture(img_gray[index], index) #6
-	#hue_histogram (img_hues[index], index) #24
-	contrast (img_gray[index], index) #24
+	hue_histogram (img_hues[index], index) #1
+	contrast (img_gray[index], index) #1
 	colour_coherence (img_hues[index], index) #1
 	hue_count (img_bgr[index], index) #1
-	#convert_edge_features (img_gray[index], index)
-	#hog(img_gray[index], index)
 	sobel_otsu(img_gray[index], index) #25
 	features[index].append(1)
 for index in range (num_images_real):
@@ -291,17 +300,20 @@ for index in range (num_images_real):
 	features.append([])
 	print(index)
 	lbp_texture(img_gray[index+num_images_abs], index+num_images_abs)
-	#hue_histogram (img_hues[index+num_images_abs], index+num_images_abs)
+	hue_histogram (img_hues[index+num_images_abs], index+num_images_abs)
 	contrast (img_gray[index+num_images_abs], index+num_images_abs)
 	colour_coherence (img_hues[index+num_images_abs], index+num_images_abs)
 	hue_count (img_bgr[index+num_images_abs], index+num_images_abs)
-	#convert_edge_features (img_gray[index+num_images_abs], index+num_images_abs)
-	#hog (img_gray[index+num_images_abs], index+num_images_abs)
 	sobel_otsu(img_gray[index+num_images_abs], index+num_images_abs)
 	features[index+num_images_abs].append(0)
 #print (features)
 #print (matplotlib.matplotlib_fname())
-out_file_path = './new_output_featuresnohh.csv'
+
+features=np.array(features)
+'''for cols in range(len(features[0])):
+	features[:,cols]=normalize(features[:,cols])'''
+
+out_file_path = './output_features_hh.csv'
 
 with open(out_file_path, "a") as out_file:
     writer = csv.writer(out_file)
